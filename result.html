@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Your Result — Human vs AI</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="style.css">
+<style>
+  .result-page{max-width:720px; margin:0 auto; padding:8vh 5vw 10vh; position:relative; z-index:1; text-align:left;}
+  .result-page .center{text-align:center;}
+  .rp-section{margin-top:26px;}
+  .rp-label{font-family:'JetBrains Mono',monospace; font-size:.7rem; letter-spacing:.2em; color:var(--gold); text-transform:uppercase; display:block; margin-bottom:8px;}
+  .rp-flow-mini{display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;}
+  .rp-flow-mini span{border:1px solid var(--border-metal); border-radius:999px; padding:5px 12px; font-size:.75rem; color:var(--text-dim);}
+  .not-found{text-align:center; padding:20vh 5vw;}
+</style>
+</head>
+<body>
+
+<div class="atmosphere">
+  <div class="atmosphere__stonetex"></div>
+  <div class="fog"></div>
+  <div class="fog fog--2"></div>
+  <div class="atmosphere__vignette"></div>
+</div>
+
+<div id="content"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="data.js"></script>
+<script src="shared.js"></script>
+<script>
+(function(){
+  const params = new URLSearchParams(window.location.search);
+  const encoded = params.get("d");
+  const result = encoded ? decodeResult(encoded) : null;
+  const root = document.getElementById("content");
+
+  if (!result || !DUNGEONS[result.dungeon]) {
+    root.innerHTML = `
+      <div class="not-found">
+        <p class="eyebrow">Human vs AI</p>
+        <h1 class="title-hero" style="font-size:2.4rem;">No Result Found</h1>
+        <p class="lede" style="margin:18px auto;">This link doesn't contain a valid result. Play the challenge to generate your own result sheet.</p>
+        <div class="btn-row"><a class="btn btn--primary" href="index.html">Return to Lobby</a></div>
+      </div>`;
+    return;
+  }
+
+  const d = DUNGEONS[result.dungeon];
+  const data = result.mode === "monolingual" ? d.mono[result.lang] : d.bi[result.direction];
+  const isMono = result.mode === "monolingual";
+  const explanation = isMono ? d.explanationMono : d.explanationBi;
+  const lang = result.lang === "en" ? explanation.en : explanation.ta;
+
+  const contentSection = isMono
+    ? `
+      <div class="rp-section panel">
+        <span class="rp-label">Source Text</span>
+        <p>${data.source}</p>
+        <br>
+        <div style="height:16px;"></div>
+        <span class="rp-label">Translation A - ${data.targetA.heading}</span>
+        <p>${data.targetA.content}</p>
+        <br>
+        <div style="height:16px;"></div>
+        <span class="rp-label">Translation B - ${data.targetB.heading}</span>
+        <p>${data.targetB.content}</p>
+      </div>`
+    : `
+      <div class="rp-section panel">
+        <span class="rp-label">Source Text</span>
+        <p>${data.source}</p>
+        <br>
+        <div style="height:16px;"></div>
+        <span class="rp-label">${data.targetA.heading} Target Text</span>
+        <p>${data.targetA.content}</p>
+        <br>
+        <div style="height:16px;"></div>
+        <span class="rp-label">${data.targetB.heading} Target Text</span>
+        <p>${data.targetB.content}</p>
+      </div>`;
+
+  root.innerHTML = `
+    <div class="result-page">
+      <div class="center">
+        <p class="eyebrow">Human vs AI</p>
+        <h1 class="title-hero" style="font-size:clamp(1.8rem,7vw,2.6rem);">Guess the Translation?</h1>
+        <p class="subtitle">Player Result</p>
+        <p class="result-id">${result.id}</p>
+      </div>
+
+      <div class="rp-section result-grid" style="margin-left:auto; margin-right:auto;">
+        <div class="result-row"><div class="result-row__k">Game Mode</div><div class="result-row__v">${isMono ? "Monolingual" : "Bilingual"}</div></div>
+        <div class="result-row"><div class="result-row__k">Dungeon</div><div class="result-row__v">${d.name}</div></div>
+        <div class="result-row"><div class="result-row__k">Dungeon Rank</div><div class="result-row__v">${d.rank}</div></div> 
+        <div class="result-row"><div class="result-row__k">Player's Answer</div><div class="result-row__v">${result.answer} is AI</div></div>
+      </div>
+
+      <div class="center rp-section">
+        <div class="result-banner ${result.correct ? "correct" : "incorrect"}" style="font-size:2rem;">
+          ${result.correct ? "CORRECT, PLAYER!" : "INCORRECT, PLAYER."}
+        </div>
+      </div>
+
+      ${contentSection}
+
+      <div class="rp-section panel">
+        <span class="rp-label">Analysis</span>
+        <p class="explain-text" style="font-size:.98rem;">${parseHighlights(lang)}</p>
+      </div>
+
+      <div class="rp-section panel">
+        <span class="rp-label" style="color:var(--cyber-2);">AI Translation Method</span>
+        <div class="rp-flow-mini">${AI_STEPS.map(s => `<span>${s}</span>`).join("")}</div>
+        <div style="height:18px;"></div>
+        <span class="rp-label" style="color:var(--gold-bright);">Human Translation Method</span>
+        <div class="rp-flow-mini">${HUMAN_STEPS.map(s => `<span>${s}</span>`).join("")}</div>
+      </div>
+
+      <div class="btn-row" style="margin-top:34px;">
+        <button class="btn btn--primary btn--wide" id="btn-pdf">Download Result as PDF</button>
+        <a class="btn btn--wide" href="index.html" style="display: flex; justify-content: center; align-items: center; text-decoration: none;">Return to Lobby</a>
+      </div>
+
+      <p class="center small-note" style="margin-top:24px;">Thank you, Player.</p>
+    </div>
+  `;
+
+  document.getElementById("btn-pdf").addEventListener("click", (e) => downloadResultPDF(result, e.currentTarget));
+})();
+</script>
+</body>
+</html>
